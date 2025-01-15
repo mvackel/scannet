@@ -1,0 +1,10 @@
+gnuplot/
+testFiles/
+log_*
+mColors_*
+mDendrogramGraphic*
+mDistance*
+*.csv
+*.zip
+*.bat
+*.lnk

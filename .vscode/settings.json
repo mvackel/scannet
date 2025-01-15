@@ -1,0 +1,13 @@
+{
+	"terminal.integrated.defaultProfile.windows": "PowerShell",
+	"code-runner.executorMap": {
+		// run c code on the vscode integrated terminal:
+		//"c": "cd $dir && \n gcc -fdiagnostics-color=always -g \"$fileName\" -o \"$fileNameWithoutExt\" && \n $dir$fileNameWithoutExt",
+		// run c code on external terminal (final command with 'start'):
+		"c": "cd $dir && \n gcc -fdiagnostics-color=always -g \"$fileName\" -o \"$fileNameWithoutExt\" && \n start $fileNameWithoutExt.exe",
+		"cpp": "cd $dir && \n g++ -fdiagnostics-color=always -g \"$fileName\" -o \"$fileNameWithoutExt\" && \n $dir$fileNameWithoutExt.exe",
+	},
+	"code-runner.runInTerminal": true,
+	"code-runner.showRunIconInEditorTitleMenu": true,
+	"code-runner.clearPreviousOutput": true,
+}

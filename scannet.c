@@ -16,14 +16,18 @@
 
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+	Modified: 2025-01 by Marcos Ackel
  */
  
  
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getopt.h>
+#include <getopt.h> 
 #include <time.h>
+#include <stdbool.h>
+
 #ifdef WINDOWS
     #include <direct.h>
     #define GetCurrentDir _getcwd
@@ -50,6 +54,12 @@ typedef struct C_EDGE{
     int V2;
 }edge;
 
+// struct for matrix indexing
+typedef struct {
+	unsigned int row;
+	unsigned int col;
+} index_t;
+
 // Prototypes
 void loadSimilarityMatrix();
 void loadSequenceList(char[], char**);
@@ -66,14 +76,14 @@ void createNeighborhoodMatrix(complexNetwork);
 void DestroyDynamicMatrix(int**, int );
 void clearMatrix(int**);
 void clearMatrixBySize(int**, int );
-int isThereEdge(int**);
+bool isThereEdge(int**);
 void calculateBetweenness(int, complexNetwork, float**);
-void removeEdgesWithBiggerBetweenness(int[][2], float**, int**);
-void processGraphicDendrogram(int[][2],complexNetwork*, int**);
+void removeEdgesWithBiggerBetweenness(index_t[], float**, int**);
+void processGraphicDendrogram(index_t[],complexNetwork*, int**);
 void startDendrogram(complexNetwork*);
 void copyMatrixOfFloat(int**, float**);
 void copyMatrix(int**, int**);
-void writeLog(int*, int*);
+void showRemovedEdges(unsigned long totalRemoved, time_t start);
 void conveterArrayInMatrix(int*, int**, int, int);
 void conveterMatrixInArray(int**, int*, int , int );
 int findInArray(int*, int, int);
@@ -82,11 +92,10 @@ void createColorsMatrix(complexNetwork*);
 void saveMatrizInFile();
 void saveMatrizInFileFloat();
 int findRealIndex(int* realIndex, int);
-void adjustNeighborhoodMatrix(int[][2], int**, int**, int);
+void adjustNeighborhoodMatrix(index_t[], int**, int**, int);
 int countNumberLinesOfFile(char[30]);
 void plotGraphic();
-double getTime();
-void setupOutputNames(char*, int, char[10]);
+void setupOutputNames(char*, int, const char*); //char[10]);
 void saveNetwork(int**, char[30]);
 void orderSequences(complexNetwork*);
 void saveArrayInFile(char**, char[], int);
@@ -96,14 +105,11 @@ complexNetwork selectBetterNetworkToFindCommunities(FILE*);
 void calculateDistances(int);
 int calculateDiameter();
 void showtime();
+void showElapsed(const char* text, const time_t start);		// show elapsed time from 'start' in format HH:mm:ss
 float calculateDistance();
+void showRunningClock(void);
 
 //Global vars
-enum boolean {
-    true = 1, false = 0
-};
-
-typedef enum boolean bool;
 
 int sizeSimilarityMatrix = 1;
 float** similarityMatrix;
@@ -125,16 +131,18 @@ int size;
 int optionLoadSequenceFile = 0;
 char** sequenceArray;
 
-double start_t_RC, end_t_RC, tempo_total_RC, start_t_Distancia, end_t_Distancia, 
+time_t start_t_RC, end_t_RC, tempo_total_RC, start_t_Distancia, end_t_Distancia, 
        tempo_total_Distancia, start_t_NGA, end_t_NGA, tempo_total_NGA, start_t_MC, 
        end_t_MC, tempo_total_MC, start_t_TOTAL, end_t_TOTAL, tempo_total_TOTAL ;
 
-double start_t_Paralelo, end_t_Paralelo, total_t_Paralelo;
-double * tempos_paralelo;
-char filename[21];
+// Not used:
+//double start_t_Paralelo, end_t_Paralelo, total_t_Paralelo;
+//double * tempos_paralelo;
+char filename[31];
 char sequenceFilename[21];
 FILE *arqLog;
-
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 int main(int argc, char** argv) {
         complexNetwork betterNetwork;
@@ -152,10 +160,10 @@ int main(int argc, char** argv) {
 		printf("\n\n You should have received a copy of the GNU General Public License");
 		printf("\n along with this program.  If not, see <http://www.gnu.org/licenses/>.");
 		
-		printf("\n\n\n --------------------------- SCANNET v1.0 ------------------------------ \n\n");
-		
+		printf("\n\n\n --------------------------- SCANNET v1.1 ------------------------------ \n\n");
+		 
         while (option == 1 || option == 2){
-        
+            
             if(option == 1){
                 
                 printf("\n\n Enter the similarity file name (Ex: input.txt):  ");
@@ -172,7 +180,7 @@ int main(int argc, char** argv) {
 				
                 similarityMatrix = createDynamicMatrixFloat(sizeSimilarityMatrix, sizeSimilarityMatrix);
                 loadSimilarityMatrix(filename, similarityMatrix);   
-                start_t_TOTAL = getTime();
+                start_t_TOTAL = time(NULL);
                 optionLoadSequenceFile = 0;
 				
                 while((optionLoadSequenceFile != 1)&&(optionLoadSequenceFile != 2)){
@@ -185,7 +193,8 @@ int main(int argc, char** argv) {
                          sequenceArray = createDynamicCharMatrix(sizeSimilarityMatrix);
                          loadSequenceList(sequenceFilename, sequenceArray);   
                     }else if((optionLoadSequenceFile != 1)&&(optionLoadSequenceFile != 2)){
-                         printf("\n\n Invalid Option  ");
+                         printf("\n Invalid Option  ");
+						 continue;
                     }                 
                 }
                 
@@ -197,13 +206,13 @@ int main(int argc, char** argv) {
                 arqLog = fopen(path, "wt");
                 fprintf(arqLog,"\n\n ------- Summary execution --------- \n");
 				
-                start_t_RC = getTime();  
-                printf("\n\n The complex networks are being created, please wait... \n");
-                createComplexNetworks();
-		        end_t_RC = getTime();
+                start_t_RC = time(NULL);
+                //printf("\n\n The complex networks are being created, please wait... \n");
+                createComplexNetworks();  // time consuming function
+		        end_t_RC = time(NULL);
                 tempo_total_RC = end_t_RC - start_t_RC;
             }
-			betterNetwork = selectBetterNetworkToFindCommunities(arqLog);
+			betterNetwork = selectBetterNetworkToFindCommunities(arqLog);  
 		    printf("\n Number of edges: %d ", betterNetwork.qtdOfEdges);
 			int i = 0;
             for (i = 0; i < sizeSimilarityMatrix; i++){ 
@@ -214,9 +223,11 @@ int main(int argc, char** argv) {
             setupOutputNames(networkName, 1, ".csv");
             saveNetwork(betterNetwork.neighborhoodMatrix, networkName);
 	        copyMatrix(betterNetwork.neighborhoodMatrix, betterNetwork.colorsMatrix);
-            printf("\n\n The Girvan-Newman algorithm is running, please wait ...\n\n");
-            executeNga(betterNetwork);
-            end_t_TOTAL = getTime();
+            printf("\n\n The Girvan-Newman algorithm is running, please wait ...");
+			showtime("Start NGA");
+			printf("\n");
+            executeNga(betterNetwork);			// very time consuming function
+            end_t_TOTAL = time(NULL);
 
 			for (i = 0; i < sizeSimilarityMatrix; i++){ 
                betterNetwork.dendrogramGraphic[1][i] = betterNetwork.realIndexDendrogramGraphic[i]+1;     
@@ -236,9 +247,9 @@ int main(int argc, char** argv) {
 			tempo_total_TOTAL = tempo_total_RC + tempo_total_NGA;
             showtime("End of execution");  
             fprintf(arqLog,"\n\n The selected optimal network has %d edges", betterNetwork.qtdOfEdges);
-            fprintf(arqLog,"\n Time spent on the creation of 101 complex networks (ms): %.5lf", tempo_total_RC); 
-            fprintf(arqLog,"\n Time spent on NGA (ms): %.5lf", tempo_total_NGA);
-            fprintf(arqLog,"\n Running time (ms): %.5lf \n", tempo_total_TOTAL);
+            fprintf(arqLog,"\n Time spent on the creation of 101 complex networks (s): %ld", tempo_total_RC); 
+            fprintf(arqLog,"\n Time spent on NGA (s): %ld", tempo_total_NGA);
+            fprintf(arqLog,"\n Running time (s): %ld \n", tempo_total_TOTAL);
             fprintf(arqLog,"\n --------------------------------------------------- \n\n\n");
             
             printf("\n\n What do you want to do now?  ");
@@ -256,7 +267,7 @@ int main(int argc, char** argv) {
 	
         return 0;
 }
-
+//-----------------------------------------------------------------------------
 
 void saveNetwork(int** matrix , char networkName[30]){
       char path[1000];
@@ -278,8 +289,9 @@ void saveNetwork(int** matrix , char networkName[30]){
     fclose(arqNetwork);
     printf("\n\n The file %s was successfully saved! \n", networkName);
 }
+//-----------------------------------------------------------------------------
 
-void setupOutputNames(char * nameOfFile, int concatNetwork, char format[10] ){
+void setupOutputNames(char * nameOfFile, int concatNetwork, const char *format){ //[10] ){
     
     int sizeFileName = strlen (filename);
     char fileNameWithoutExtension[30] = "";
@@ -305,6 +317,7 @@ void setupOutputNames(char * nameOfFile, int concatNetwork, char format[10] ){
     }
     strcat(nameOfFile, format);
 }
+//-----------------------------------------------------------------------------
 
 int countNumberLinesOfFile(char nameOfFile[30]){   
     FILE *fileptr;
@@ -326,6 +339,7 @@ int countNumberLinesOfFile(char nameOfFile[30]){
     fclose(fileptr);
     return numberLines;
 }
+//-----------------------------------------------------------------------------
 
 void conveterArrayInMatrix(int* array, int** matrix, int n, int m){
     int i = 0;  
@@ -343,6 +357,7 @@ void conveterArrayInMatrix(int* array, int** matrix, int n, int m){
         } 
     }
 }
+//-----------------------------------------------------------------------------
 
 void conveterMatrixInArray(int** matrix, int* array, int n, int m){
     int i = 0;  
@@ -356,6 +371,7 @@ void conveterMatrixInArray(int** matrix, int* array, int n, int m){
         }
     }
 }
+//-----------------------------------------------------------------------------
 
 void showtime(char texto[30]){
     time_t currentTime;
@@ -364,20 +380,17 @@ void showtime(char texto[30]){
     timeinfo = localtime(&currentTime);
     printf("\n %s: %02d:%02d:%02d \n",texto, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);   
 }
+//-----------------------------------------------------------------------------
 
-void showtimeWithParameter(char texto[30], int value){
-    time_t currentTime;
-    struct tm *timeinfo;
-    currentTime = time(NULL);
-    timeinfo = localtime(&currentTime);
-    printf("\n%s: %d  Time: %02d:%02d:%02d \n",texto, value, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);   
+// display the text and elapsed time from start in the format HH:mm:ss
+// Doesn't include any newline.
+void showElapsed(const char *text, const time_t start)
+{
+	time_t now = time(NULL);
+	time_t elapsed = now - start;
+	printf("%s %02ld:%02ld:%02ld", text, elapsed/3600, (elapsed/60)%60, elapsed%60);
 }
-
-double getTime(){   
-    time_t t;
-    t = time(NULL);
-    return (double)t;
-}
+//-----------------------------------------------------------------------------
 
 int** createDynamicMatrix(int sizeLine, int sizeColumn){
     int** matrix = malloc(sizeLine * sizeof(int*));    
@@ -398,6 +411,7 @@ int** createDynamicMatrix(int sizeLine, int sizeColumn){
     
     return matrix;
 }
+//-----------------------------------------------------------------------------
 
 int* createDynamicArray(int size){
     int* matrix = calloc(size, sizeof(int));     
@@ -409,6 +423,7 @@ int* createDynamicArray(int size){
     
     return matrix;
 }
+//-----------------------------------------------------------------------------
 
 char** createDynamicCharMatrix(int size){
     char** matrix = malloc(size*sizeof(char*));
@@ -429,6 +444,7 @@ char** createDynamicCharMatrix(int size){
     
     return matrix;
 }
+//-----------------------------------------------------------------------------
 
 void reiniciaMatriz(int sizeLine, int sizeColumn, int** matrix){
     int i, j;
@@ -439,6 +455,7 @@ void reiniciaMatriz(int sizeLine, int sizeColumn, int** matrix){
         }
     }
 }
+//-----------------------------------------------------------------------------
 
 void createAdAndNM(int sizeLine, int sizeColumn, int** adjacencyMatrix, int ** neighborhoodMatrix){
     int i;
@@ -448,7 +465,7 @@ void createAdAndNM(int sizeLine, int sizeColumn, int** adjacencyMatrix, int ** n
         neighborhoodMatrix[i] = calloc(sizeColumn, sizeof(int));
     }
 }
-
+//-----------------------------------------------------------------------------
 
 float** createDynamicMatrixFloat(int sizeLine, int sizeColumn){
 
@@ -472,6 +489,7 @@ float** createDynamicMatrixFloat(int sizeLine, int sizeColumn){
 
     return matrix;
 }
+//-----------------------------------------------------------------------------
 
 void DestroyDynamicMatrix(int** matrix, int sizeLine){
     int i;
@@ -481,6 +499,7 @@ void DestroyDynamicMatrix(int** matrix, int sizeLine){
     }
     free(matrix);
 }
+//-----------------------------------------------------------------------------
 
 void DestroyDynamicMatrixFloat(float** matrix, int sizeLine){
     int i;
@@ -490,6 +509,7 @@ void DestroyDynamicMatrixFloat(float** matrix, int sizeLine){
     }
     free(matrix);
 }
+//-----------------------------------------------------------------------------
 
 void loadSimilarityMatrix(char nameOfFile[30], float** matrix){
     FILE *arqBLAST; 
@@ -535,6 +555,7 @@ void loadSimilarityMatrix(char nameOfFile[30], float** matrix){
          
    fclose(arqBLAST);
 } 
+//-----------------------------------------------------------------------------
 
 void loadSequenceList(char nameOfFile[30], char** array){
     FILE *arqSequence; 
@@ -568,7 +589,7 @@ void loadSequenceList(char nameOfFile[30], char** array){
          
    fclose(arqSequence);
 } 
-
+//-----------------------------------------------------------------------------
 
 void saveMatrizInFile(int** matriz, char nameOfFile[30], int n, int m){         
     FILE *arqMATRIZ;
@@ -602,6 +623,7 @@ void saveMatrizInFile(int** matriz, char nameOfFile[30], int n, int m){
 
     printf("\n\n\n The file %s was successfully saved! \n", nameOfFile);
 }
+//-----------------------------------------------------------------------------
     
 void saveMatrizInFileFloat(float** matriz, char nameOfFile[30], int n, int m){         
     FILE *arqMATRIZ;
@@ -631,6 +653,7 @@ void saveMatrizInFileFloat(float** matriz, char nameOfFile[30], int n, int m){
 
     printf("\n\n The file %s was successfully saved! \n", nameOfFile);
 }
+//-----------------------------------------------------------------------------
 
 void saveArrayInFileFloat(float* array, char nameOfFile[30], int size){         
     FILE *arqMATRIZ;
@@ -656,6 +679,7 @@ void saveArrayInFileFloat(float* array, char nameOfFile[30], int size){
 
     printf("\n\n\n The file %s was successfully saved! \n", nameOfFile);
 }
+//-----------------------------------------------------------------------------
 
 void saveGraphicDendrogramInFile(float* array){     
     char nameOfFile[50] = "mDendrogramGraphic_";
@@ -687,6 +711,7 @@ void saveGraphicDendrogramInFile(float* array){
 	if (result == EOF) printf("\n Error in file recording\n");
     fclose(arqMATRIZ);
 }
+//-----------------------------------------------------------------------------
 
 void saveArrayInFile(char** array, char nameOfFile[30], int size){         
     FILE *arqSequence;
@@ -708,12 +733,12 @@ void saveArrayInFile(char** array, char nameOfFile[30], int size){
             result = fprintf(arqSequence,"\n");
             if (result == EOF) printf("\n Error in file recording \n");
         }
-        
     }
 
     fclose(arqSequence);
     printf("\n\n\n The file %s was successfully saved! \n", nameOfFile);
 }
+//-----------------------------------------------------------------------------
 
 void createComplexNetworks(){
     complexNetworks = (complexNetwork *)malloc(2 * sizeof(complexNetwork));
@@ -728,7 +753,10 @@ void createComplexNetworks(){
 	createAdjacencyMatrix(i,0);
 	createNeighborhoodMatrix(complexNetworks[0]);
     
+	printf("\n\n");
     for (i = 1;  i < NCutPoints; i++){
+		printf("\r >>> Creating Complex Networks: %d/%d", i+1, NCutPoints);
+		fflush(NULL);
 	    complexNetworks[1] = createComplexNetwork();;
         createAdjacencyMatrix(i,1);
         createNeighborhoodMatrix(complexNetworks[1]);
@@ -740,7 +768,7 @@ void createComplexNetworks(){
     setupOutputNames(mDistanceGraphic, 0, ".dat");
     saveArrayInFileFloat(distances, mDistanceGraphic ,i_distance);
 }	
- 
+//-----------------------------------------------------------------------------
 
 complexNetwork createComplexNetwork(){
     complexNetwork complexNetwork; 
@@ -754,6 +782,7 @@ complexNetwork createComplexNetwork(){
 	
     return complexNetwork;
 }   
+//-----------------------------------------------------------------------------
 
 void createAdjacencyMatrix(int cutPoint, int index){
     int i,j;   
@@ -767,6 +796,7 @@ void createAdjacencyMatrix(int cutPoint, int index){
         } 
     }
 }
+//-----------------------------------------------------------------------------
 
 void createNeighborhoodMatrix(complexNetwork complexNetwork){
     int i;
@@ -775,6 +805,7 @@ void createNeighborhoodMatrix(complexNetwork complexNetwork){
          dijkstra(i, complexNetwork.adjacencyMatrix, complexNetwork.neighborhoodMatrix, sizeSimilarityMatrix);
     }
 }
+//-----------------------------------------------------------------------------
 
 void dijkstra (int Vi, int** adjacencyMatrix, int** neighborhoodMatrix, int maxSize)
 {       
@@ -806,6 +837,7 @@ void dijkstra (int Vi, int** adjacencyMatrix, int** neighborhoodMatrix, int maxS
         }        
     }
 }
+//-----------------------------------------------------------------------------
 
 void calculateDistances(int i){
 	  float distance = 0;
@@ -818,12 +850,13 @@ void calculateDistances(int i){
 		  indexMelhorRede = i;
 	  }
 }
+//-----------------------------------------------------------------------------
 
 complexNetwork selectBetterNetworkToFindCommunities(FILE* arqLog){
 	int i = 0;     
     plotGraphic(); 
 	for (i = 0; i < NCutPoints-1; i++){
-		 fprintf(arqLog,"\n Distance between the network %d and %d = %f", i, i+1, distances[i]);
+		 fprintf(arqLog,"\n Distance between the network %2d and %2d = %f", i, i+1, distances[i]);
          printf("\n Distance between the network %d and %d = %f", i, i+1, distances[i]);
 	}		
       
@@ -844,6 +877,7 @@ complexNetwork selectBetterNetworkToFindCommunities(FILE* arqLog){
 	
     return complexNetworks[1];
 }
+//-----------------------------------------------------------------------------
 
 void plotGraphic(){
 
@@ -862,6 +896,7 @@ void plotGraphic(){
 	
     system(syscommand);
 }
+//-----------------------------------------------------------------------------
 
 float calculateDistance(complexNetwork networkOne, complexNetwork networkTwo){
     int i = 0;
@@ -882,6 +917,7 @@ float calculateDistance(complexNetwork networkOne, complexNetwork networkTwo){
     
     return a * total;
 }
+//-----------------------------------------------------------------------------
 
 int calculateDiameter(complexNetwork network){
     int i = 0;
@@ -898,9 +934,10 @@ int calculateDiameter(complexNetwork network){
 
     return bigger;
 }
+//-----------------------------------------------------------------------------
 
 void executeNga(complexNetwork complexNetwork){
-    start_t_NGA = getTime();
+    start_t_NGA = time(NULL); //getTime();
     
     float** betweennessMatrix = createDynamicMatrixFloat(sizeSimilarityMatrix, sizeSimilarityMatrix);
     int** neighborhoodMatrixPrevious = createDynamicMatrix(sizeSimilarityMatrix, sizeSimilarityMatrix);
@@ -911,23 +948,33 @@ void executeNga(complexNetwork complexNetwork){
     while( isThereEdge(complexNetwork.adjacencyMatrix) ){
         diameter = calculateDiameter(complexNetwork);
         calculateBetweenness(diameter, complexNetwork, betweennessMatrix); 
-        int nodeWithEdgeRemoved[i][2];
+        //int nodeWithEdgeRemoved[i][2];
+        index_t nodeWithEdgeRemoved[i];
         qtdNodeWithEdgeRemoved = 0;
         copyMatrix(complexNetwork.neighborhoodMatrix ,neighborhoodMatrixPrevious);
         removeEdgesWithBiggerBetweenness(nodeWithEdgeRemoved, betweennessMatrix, complexNetwork.adjacencyMatrix); 		
         complexNetwork.numberRemovedEdges++;  
         adjustNeighborhoodMatrix(nodeWithEdgeRemoved, complexNetwork.adjacencyMatrix, complexNetwork.neighborhoodMatrix, diameter);
         processGraphicDendrogram(nodeWithEdgeRemoved, &complexNetwork, neighborhoodMatrixPrevious); 		
-        writeLog(&parcialArestasRemovidas, &totalArestasRemovidas);
+
+		parcialArestasRemovidas += qtdNodeWithEdgeRemoved;
+    	totalArestasRemovidas += qtdNodeWithEdgeRemoved;
+
+		showRunningClock();
+		if (parcialArestasRemovidas >= N_EDGES) {
+			showRemovedEdges(totalArestasRemovidas, start_t_NGA);
+			parcialArestasRemovidas = 0;
+		}
     }
+	printf("\n");
 	saveGraphicDendrogramInFile(complexNetwork.dendrogramGraphic[complexNetwork.numberDendrogramLines-1]);
 
-    end_t_NGA = getTime();
+    end_t_NGA = time(NULL); //getTime();
     tempo_total_NGA = end_t_NGA - start_t_NGA;
 
-    start_t_MC = getTime();
+    start_t_MC = time(NULL);
     createColorsMatrix(&complexNetwork);
-    end_t_MC = getTime();
+    end_t_MC = time(NULL);
     tempo_total_MC = end_t_MC - start_t_MC;
     
     DestroyDynamicMatrixFloat(betweennessMatrix, sizeSimilarityMatrix);
@@ -938,6 +985,7 @@ void executeNga(complexNetwork complexNetwork){
         orderSequences(&complexNetwork);
     }
 }
+//-----------------------------------------------------------------------------
 
 void startDendrogram(complexNetwork *complexNetwork){
     int i,j, index = 0;
@@ -1009,6 +1057,7 @@ void startDendrogram(complexNetwork *complexNetwork){
     free(newCommunityItens);
     free(newCommunityItens2);
 }
+//-----------------------------------------------------------------------------
 
 int findRealIndex(int* realIndex, int virtualIndex){
     int j;
@@ -1019,9 +1068,9 @@ int findRealIndex(int* realIndex, int virtualIndex){
     }  
     return -1;
 }
+//-----------------------------------------------------------------------------
 
-
-void processGraphicDendrogram(int nodeWithEdgeRemoved[1][2], complexNetwork *complexNetwork, int** neighborhoodMatrixPrevious){
+void processGraphicDendrogram(index_t nodeWithEdgeRemoved[1], complexNetwork *complexNetwork, int** neighborhoodMatrixPrevious){
     int i,j, index = 0, index2 = 0, index3 = 0;
     int* newCommunityItens = createDynamicArray(sizeSimilarityMatrix*sizeSimilarityMatrix);
     int* itensOldCommunity = createDynamicArray(sizeSimilarityMatrix*sizeSimilarityMatrix);  
@@ -1031,8 +1080,8 @@ void processGraphicDendrogram(int nodeWithEdgeRemoved[1][2], complexNetwork *com
     int finded1 = 0; 
     int finded2 = 0; 
     
-    int indiceJ = nodeWithEdgeRemoved[0][0];
-    int indiceI = nodeWithEdgeRemoved[0][1];
+    int indiceJ = nodeWithEdgeRemoved[0].row;
+    int indiceI = nodeWithEdgeRemoved[0].col;
     
     float dividendo = 2.0;
     int realIndex = 0;
@@ -1118,6 +1167,7 @@ void processGraphicDendrogram(int nodeWithEdgeRemoved[1][2], complexNetwork *com
     free(AuxCommunity);
     free(itensOldCommunity);   
 }
+//-----------------------------------------------------------------------------
 
 void sortGraphicDendrograma(complexNetwork *complexNetwork){
     int i = (*complexNetwork).numberDendrogramLines;
@@ -1141,6 +1191,7 @@ void sortGraphicDendrograma(complexNetwork *complexNetwork){
          }
     }
 }
+//-----------------------------------------------------------------------------
 
 void createColorsMatrix(complexNetwork *complexNetwork){
     int index = 0, index1, index2 = 0, i;
@@ -1174,6 +1225,7 @@ void createColorsMatrix(complexNetwork *complexNetwork){
         }     
     }  
 }
+//-----------------------------------------------------------------------------
 
 void orderSequences(complexNetwork *complexNetwork){
     int index = 0, index1, i, valueInt;
@@ -1200,6 +1252,7 @@ void orderSequences(complexNetwork *complexNetwork){
         }     
     }  
 }
+//-----------------------------------------------------------------------------
 
 int findInArray(int* array, int item, int sizeOfArray){    
      int i;
@@ -1210,20 +1263,31 @@ int findInArray(int* array, int item, int sizeOfArray){
      }
      return -1;
 }
+//-----------------------------------------------------------------------------
 
-
-void writeLog(int* parcialArestasRemovidas, int* totalArestasRemovidas){
-    *parcialArestasRemovidas = *parcialArestasRemovidas + qtdNodeWithEdgeRemoved;
-     *totalArestasRemovidas = qtdNodeWithEdgeRemoved + *totalArestasRemovidas;
-     if(*parcialArestasRemovidas >= N_EDGES){
-        showtimeWithParameter(" Edges removed", *totalArestasRemovidas);
-        *parcialArestasRemovidas = 0;
-     }
+void showRunningClock(void)
+{
+	// running bar:
+	static int cnt = 0;
+	const char aSign[] = {'|', '/', '-', '\\'};
+	static int idx = 0;
+	if (cnt % 20 == 0) {
+		idx = (idx < sizeof(aSign)-1)? idx + 1 : 0;
+		printf("\r %c", aSign[idx]); fflush(NULL);
+	}
+	cnt = (cnt < 10)? cnt+1 : 0;
 }
+//-----------------------------------------------------------------------------
 
-int isThereEdge(int** adjacencyMatrix){
-    int true = 1;
-    int false = 0;
+void showRemovedEdges(unsigned long totalRemoved, time_t start)
+{
+	char sBuf[64] = {0};
+	sprintf(sBuf, "%s %d  ", "\r   Edges removed:", totalRemoved);
+	showElapsed(sBuf, start);
+}
+//-----------------------------------------------------------------------------
+
+bool isThereEdge(int** adjacencyMatrix){
     int i,j;
     
     for (i = 0; i < sizeSimilarityMatrix; i++){ 
@@ -1236,12 +1300,12 @@ int isThereEdge(int** adjacencyMatrix){
 
     return false;
 }
+//-----------------------------------------------------------------------------
 
-
-void removeEdgesWithBiggerBetweenness(int nodeWithEdgeRemoved[1][2], float** betweennessMatrix, int** adjacencyMatrix){
+void removeEdgesWithBiggerBetweenness(index_t nodeWithEdgeRemoved[1], float** betweennessMatrix, int** adjacencyMatrix){
     int i,j;
     float biggerValue = 0;
-    int already[sizeSimilarityMatrix*100][2];
+    index_t *already;		//already[sizeSimilarityMatrix*200][2];
     int sizeOfAlready = 0;
     int indexToRemove;
 
@@ -1253,36 +1317,54 @@ void removeEdgesWithBiggerBetweenness(int nodeWithEdgeRemoved[1][2], float** bet
         }
     }
 	
+	// count the number of edges to remove:
+	sizeOfAlready = 0;
     for (i = 0; i < sizeSimilarityMatrix; i++){ 
         for (j = i+1; j < sizeSimilarityMatrix; j++){
             if(betweennessMatrix[i][j] == biggerValue){  
-                 already[sizeOfAlready][0] = i;
-                 already[sizeOfAlready][1] = j;
+                 sizeOfAlready++;
+            }
+        }
+    }  
+	// allocate the necessary memory to the 'already' matrix:
+    already = (index_t *)malloc( (sizeSimilarityMatrix * sizeOfAlready) * sizeof(index_t));
+    if(already == NULL){
+         printf("\n ERROR IN CREATING THE REMOVED EDGES INDEX MATRIX. PROBLEM IN MEMORY ALLOCATION. \n");
+         exit(1);
+    }
+	// fill the 'already' matrix with the indexes of the edges to be removed:
+	sizeOfAlready = 0; 
+    for (i = 0; i < sizeSimilarityMatrix; i++){ 
+        for (j = i+1; j < sizeSimilarityMatrix; j++){
+            if(betweennessMatrix[i][j] == biggerValue){  
+                 already[sizeOfAlready].row = i;
+                 already[sizeOfAlready].col = j;
                  sizeOfAlready++;
             }
         }
     }  
 
     srand(time(NULL));
-    srand(100);
+    // srand(100);  For TESTS only! VERIRY....
     indexToRemove = rand() % sizeOfAlready;
-    i = already[indexToRemove][0];
-    j = already[indexToRemove][1];
+    i = already[indexToRemove].row;
+    j = already[indexToRemove].col;
     adjacencyMatrix[i][j] = 0;
     adjacencyMatrix[j][i] = 0;
-    nodeWithEdgeRemoved[qtdNodeWithEdgeRemoved][0] = i;
-    nodeWithEdgeRemoved[qtdNodeWithEdgeRemoved][1] = j;
+    nodeWithEdgeRemoved[qtdNodeWithEdgeRemoved].row = i;
+    nodeWithEdgeRemoved[qtdNodeWithEdgeRemoved].col = j;
     qtdNodeWithEdgeRemoved++;
 }
+//-----------------------------------------------------------------------------
 
-void adjustNeighborhoodMatrix(int nodeWithEdgeRemoved[1][2], int** adjacencyMatrix, int** neighborhoodMatrix, int diameter){
+void adjustNeighborhoodMatrix(index_t nodeWithEdgeRemoved[1], int** adjacencyMatrix, int** neighborhoodMatrix, int diameter){
     int indiceI, indiceJ, p, i, d, v1,v2, pathSize, item;
     int vertex[sizeSimilarityMatrix];
     int sizeVertex = 0, removeEdge = 1, sizeAux = 0, sizeEdges = 0, hasPath = 0;
     int aux, finded;
     
-    indiceI = nodeWithEdgeRemoved[0][0];
-    indiceJ = nodeWithEdgeRemoved[0][1];
+    indiceI = nodeWithEdgeRemoved[0].row;
+    indiceJ = nodeWithEdgeRemoved[0].col;
     neighborhoodMatrix[indiceI][indiceJ] = 0;
     neighborhoodMatrix[indiceJ][indiceI] = 0;
     vertex[sizeVertex] = indiceI;
@@ -1377,6 +1459,7 @@ void adjustNeighborhoodMatrix(int nodeWithEdgeRemoved[1][2], int** adjacencyMatr
     }           
     free(removedEdges);
 }
+//-----------------------------------------------------------------------------
 
 void calculateBetweenness(int diameter, complexNetwork complexNetwork, float** betweennessMatrix){
     int i, j, l, k, m;
@@ -1421,7 +1504,7 @@ void calculateBetweenness(int diameter, complexNetwork complexNetwork, float** b
         }
     }
 }
-
+//-----------------------------------------------------------------------------
 
 void copyMatrixOfFloat(int** sourceMatrix, float** targetMatrix){
     int i,j;
@@ -1433,6 +1516,7 @@ void copyMatrixOfFloat(int** sourceMatrix, float** targetMatrix){
         }
     }   
 }
+//-----------------------------------------------------------------------------
 
 void copyMatrix(int** sourceMatrix, int** targetMatrix){
     int i,j;
@@ -1444,6 +1528,7 @@ void copyMatrix(int** sourceMatrix, int** targetMatrix){
         }
     }    
 }
+//-----------------------------------------------------------------------------
 
 void clearMatrix(int** matrix){
     int i,j;
@@ -1455,6 +1540,7 @@ void clearMatrix(int** matrix){
         }
     }    
 }
+//-----------------------------------------------------------------------------
 
 void clearMatrixBySize(int** matrix, int size){
     int i,j;
@@ -1466,6 +1552,7 @@ void clearMatrixBySize(int** matrix, int size){
         }
     }
 }
+//-----------------------------------------------------------------------------
 
 void clearVetor(int* vetor){
     int i;
@@ -1474,3 +1561,5 @@ void clearVetor(int* vetor){
         vetor[i] = 0;
     }    
 }
+//-----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
